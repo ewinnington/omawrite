@@ -1,0 +1,27 @@
+#!/usr/bin/env sh
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+WORKDIR="$(mktemp -d)"
+trap 'rm -rf "$WORKDIR"' EXIT
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "npm is required to regenerate the MathJax bundle." >&2
+  exit 1
+fi
+
+cd "$WORKDIR"
+npm init -y >/dev/null
+npm install --silent mathjax-full@3.2.1 esbuild
+cp "$ROOT/src/mathjax/tex-to-svg.js" .
+
+npx esbuild tex-to-svg.js \
+  --bundle \
+  --format=iife \
+  --platform=neutral \
+  --target=es6 \
+  --minify \
+  --define:PACKAGE_VERSION='"3.2.1"' \
+  --outfile="$ROOT/src/mathjax/tex-svg-full.js"
+
+echo "Wrote $ROOT/src/mathjax/tex-svg-full.js"

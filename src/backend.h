@@ -10,6 +10,8 @@
 #include <QVariantList>
 #include <memory>
 
+#include "mathrenderer.h"
+
 class MarkdownHighlighter;
 class QTextDocument;
 class QWindow;
@@ -28,6 +30,7 @@ class Backend : public QObject {
     Q_PROPERTY(QString themeForeground READ themeForeground NOTIFY themeColorsChanged)
     Q_PROPERTY(QString themeAccent READ themeAccent NOTIFY themeColorsChanged)
     Q_PROPERTY(QString themeSelection READ themeSelection NOTIFY themeColorsChanged)
+    Q_PROPERTY(bool mathRenderingEnabled READ mathRenderingEnabled WRITE setMathRenderingEnabled NOTIFY mathRenderingEnabledChanged)
 
 public:
     explicit Backend(QObject *parent = nullptr);
@@ -49,6 +52,8 @@ public:
     QString themeForeground() const { return m_themeForeground; }
     QString themeAccent() const { return m_themeAccent; }
     QString themeSelection() const { return m_themeSelection; }
+    bool mathRenderingEnabled() const { return m_mathRenderingEnabled; }
+    void setMathRenderingEnabled(bool enabled);
     static int countWords(const QString &text);
     static QString normalizedLinkUrl(const QString &clipboardText);
     static QString suggestedFileName(const QString &text);
@@ -74,6 +79,7 @@ public:
     Q_INVOKABLE void openExternalUrl(const QUrl &url);
     Q_INVOKABLE QVariantMap windowGeometry() const;
     Q_INVOKABLE void saveWindowGeometry(int x, int y, int width, int height, bool maximized);
+    Q_INVOKABLE void toggleMathRendering();
 
 signals:
     void fileUrlChanged();
@@ -83,6 +89,7 @@ signals:
     void darkModeChanged();
     void textScaleChanged();
     void themeColorsChanged();
+    void mathRenderingEnabledChanged();
     void closeAfterSave();
     void openDialogRequested();
     void saveDialogRequested(const QUrl &suggestedUrl);
@@ -110,6 +117,10 @@ private:
     void watchCurrentFile();
     void loadOmarchyTheme();
     void watchOmarchyTheme();
+    void applyMathRenderMode();
+    void renderMathSpans();
+    void restoreMathSource();
+    void scheduleMathRender();
 
     QUrl m_fileUrl;
     bool m_modified = false;
@@ -125,6 +136,7 @@ private:
     int m_lastChangeAdded = 0;
     QTimer m_wordCountTimer;
     QTimer m_recoveryTimer;
+    QTimer m_mathRenderTimer;
     QFileSystemWatcher m_fileWatcher;
     QPointer<QTextDocument> m_document;
     QPointer<QWindow> m_parentWindow;
@@ -140,4 +152,6 @@ private:
     QString m_themeAccent;
     QString m_themeSelection;
     QFileSystemWatcher m_themeWatcher;
+    bool m_mathRenderingEnabled = true;
+    MathRenderer m_mathRenderer;
 };

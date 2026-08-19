@@ -4,11 +4,14 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickStyle>
+#include <QUrl>
 
 #include "backend.h"
+#include "mathrenderer.h"
+#include "mathscanner.h"
 #include "markdownhighlighter.h"
 
-class OmawriteTest : public QObject {
+class OmathsTest : public QObject {
     Q_OBJECT
 
 private slots:
@@ -52,6 +55,104 @@ private slots:
         QCOMPARE(markup.at(0).content.length, 4);
         QCOMPARE(markup.at(2).content.length, 4);
         QCOMPARE(markup.at(2).markers[0].length, 1);
+    }
+
+    void scansMathInlineAndDisplayDelimiters() {
+        const QString text = QStringLiteral(
+            "alpha $x+1$ beta\n"
+            "gamma \\(a+b\\) delta\n"
+            "$$x^2$$\n"
+            "\\[y^2\\]\n");
+        const QVector<MathSpan> spans = scanMath(text);
+        QCOMPARE(spans.size(), 4);
+        QCOMPARE(text.mid(spans.at(0).start, spans.at(0).end - spans.at(0).start),
+                 QStringLiteral("$x+1$"));
+        QCOMPARE(text.mid(spans.at(1).start, spans.at(1).end - spans.at(1).start),
+                 QStringLiteral("\\(a+b\\)"));
+        QVERIFY(spans.at(2).display);
+        QVERIFY(spans.at(3).display);
+    }
+
+    void enforcesDollarSpacingRules() {
+        QCOMPARE(scanMath(QStringLiteral("$x$")).size(), 1);
+        QCOMPARE(scanMath(QStringLiteral("$ x$")).size(), 0);
+        QCOMPARE(scanMath(QStringLiteral("$x $")).size(), 0);
+        QCOMPARE(scanMath(QStringLiteral("a$x$ b")).size(), 1);
+        QCOMPARE(scanMath(QStringLiteral("$5 and $6")).size(), 0);
+        QCOMPARE(scanMath(QStringLiteral("each $n\\in\\mathbb{N}$, next")).size(), 1);
+        QCOMPARE(scanMath(QStringLiteral("($x$)")).size(), 1);
+        QCOMPARE(scanMath(QStringLiteral("$x$.")).size(), 1);
+    }
+
+    void ignoresEscapedDollarsAndCode() {
+        QCOMPARE(scanMath(QStringLiteral("\\$x$")).size(), 0);
+        QCOMPARE(scanMath(QStringLiteral("`$x$`")).size(), 0);
+        QCOMPARE(scanMath(QStringLiteral("```\\n$x$\\n```")).size(), 0);
+        QCOMPARE(scanMath(QStringLiteral("~~~tex\\n$x$\\n~~~")).size(), 0);
+    }
+
+    void supportsMultilineParenAndBracketMath() {
+        const QString text = QStringLiteral(
+            "x \\(a+\n"
+            "b\\) y\n"
+            "\\[c+\n"
+            "d\\]\n");
+        const QVector<MathSpan> spans = scanMath(text);
+        QCOMPARE(spans.size(), 2);
+        QVERIFY(!spans.at(0).display);
+        QVERIFY(spans.at(1).display);
+    }
+
+    void extractsMathContentFromDelimiters() {
+        QCOMPARE(mathContent(QStringLiteral("$x+1$")), QStringLiteral("x+1"));
+        QCOMPARE(mathContent(QStringLiteral("$$x^2$$")), QStringLiteral("x^2"));
+        QCOMPARE(mathContent(QStringLiteral("\\(a+b\\)")), QStringLiteral("a+b"));
+        QCOMPARE(mathContent(QStringLiteral("\\[y^2\\]")), QStringLiteral("y^2"));
+    }
+
+    void rendersTexToSvg() {
+        MathRenderer renderer;
+        const QString svg = renderer.renderSvg(QStringLiteral("x+1"), false);
+        QVERIFY2(!svg.isEmpty(), qPrintable(renderer.lastError()));
+        QVERIFY(svg.contains(QStringLiteral("<svg")));
+    }
+
+    void mathImageResourceUrlRoundtrips() {
+        const QString digest = QString(64, QLatin1Char('a'));
+        QVERIFY(!QUrl(QStringLiteral("math://%1").arg(digest)).isValid());
+
+        const QUrl url(QStringLiteral("math:///%1").arg(digest));
+        QVERIFY(url.isValid());
+        QCOMPARE(url.path(), QStringLiteral("/") + digest);
+        QCOMPARE(QUrl(url.toString()), url);
+    }
+
+    void keepsDisplayPriorityOverInlineDollar() {
+        const QString text = QStringLiteral("$$x$$");
+        const QVector<MathSpan> spans = scanMath(text);
+        QCOMPARE(spans.size(), 1);
+        QVERIFY(spans.at(0).display);
+        QCOMPARE(text.mid(spans.at(0).start, spans.at(0).end - spans.at(0).start),
+                 QStringLiteral("$$x$$"));
+    }
+
+    void togglesMathRenderMode() {
+        QSettings settings;
+        settings.remove(QStringLiteral("math/RenderEnabled"));
+
+        Backend backend;
+        QCOMPARE(backend.mathRenderingEnabled(), true);
+
+        QSignalSpy changedSpy(&backend, &Backend::mathRenderingEnabledChanged);
+        backend.toggleMathRendering();
+        QCOMPARE(backend.mathRenderingEnabled(), false);
+        QCOMPARE(changedSpy.count(), 1);
+        QCOMPARE(QSettings().value(QStringLiteral("math/RenderEnabled")), QVariant(false));
+
+        backend.toggleMathRendering();
+        QCOMPARE(backend.mathRenderingEnabled(), true);
+        QCOMPARE(changedSpy.count(), 2);
+        QCOMPARE(QSettings().value(QStringLiteral("math/RenderEnabled")), QVariant(true));
     }
 
     void loadsCurrentOmarchyTheme() {
@@ -250,5 +351,5 @@ private:
     QTemporaryDir m_settingsDirectory;
 };
 
-QTEST_MAIN(OmawriteTest)
-#include "tst_omawrite.moc"
+QTEST_MAIN(OmathsTest)
+#include "tst_omaths.moc"

@@ -1,5 +1,6 @@
 /build/
 /build-tests/
+/.svg-cache/
 /pkg/
 /pkgbuild/pkg/
 /pkgbuild/src/

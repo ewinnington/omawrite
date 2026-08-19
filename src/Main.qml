@@ -13,7 +13,7 @@ ApplicationWindow {
     minimumWidth: 720
     minimumHeight: 520
     visible: true
-    title: (backend.modified ? "* " : "") + backend.fileName + " - Omawrite"
+    title: (backend.modified ? "* " : "") + backend.fileName + " - omaths"
 
     readonly property bool darkMode: backend.darkMode
     readonly property color pageColor: backend.themeBackground
@@ -173,7 +173,7 @@ ApplicationWindow {
     }
 
     Shortcut {
-        sequence: "Ctrl+?"
+        sequences: ["Ctrl+/", "Ctrl+?"]
         context: Qt.ApplicationShortcut
         onActivated: shortcutsDialog.open()
     }
@@ -200,6 +200,12 @@ ApplicationWindow {
         sequence: "Ctrl+P"
         context: Qt.ApplicationShortcut
         onActivated: backend.printDocument()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+M"
+        context: Qt.ApplicationShortcut
+        onActivated: backend.toggleMathRendering()
     }
 
     Shortcut {
@@ -331,7 +337,7 @@ ApplicationWindow {
         standardButtons: Dialog.Close
         anchors.centerIn: parent
         contentItem: Label {
-            text: "Ctrl+S  Save\nCtrl+Shift+S  Save As\nCtrl+O  Open\nCtrl+N  New Window\nCtrl+F  Find\nCtrl+H  Find and Replace\nCtrl+B  Bold\nCtrl+I  Italic\nCtrl+K  Link\nCtrl+P  Print\nF11 / Super+F  Fullscreen\nCtrl+?  Shortcuts"
+            text: "Ctrl+S  Save\nCtrl+Shift+S  Save As\nCtrl+O  Open\nCtrl+N  New Window\nCtrl+F  Find\nCtrl+G / Enter  Find Next\nShift+Enter  Find Previous\nCtrl+H  Find and Replace\nCtrl+B  Bold\nCtrl+I  Italic\nCtrl+K  Link\nCtrl+P  Print\nCtrl+M  Toggle Math Render\nF11 / Super+F  Fullscreen\nCtrl+/  Shortcuts"
             lineHeight: 1.5
         }
     }
@@ -839,7 +845,8 @@ ApplicationWindow {
             anchors.bottom: parent.bottom
             anchors.rightMargin: 12
             anchors.bottomMargin: 10
-            text: backend.wordCount + (backend.wordCount === 1 ? " Word" : " Words")
+            text: (backend.mathRenderingEnabled ? "Math on · " : "Math off · ")
+                  + backend.wordCount + (backend.wordCount === 1 ? " Word" : " Words")
             color: win.mutedColor
             opacity: 0.75
             font.family: "iA Writer Mono S"

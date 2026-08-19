@@ -1,17 +1,21 @@
-QT += core gui widgets printsupport qml quick quickcontrols2 quickdialogs2 dbus
+QT += core gui widgets printsupport qml quick quickcontrols2 quickdialogs2 dbus svg
 
 CONFIG += c++17 release
-TARGET = omawrite
+TARGET = omaths
 TEMPLATE = app
 
 HEADERS += \
     src/backend.h \
+    src/mathrenderer.h \
+    src/mathscanner.h \
     src/markdownhighlighter.h \
     src/systemtheme.h
 
 SOURCES += \
     src/main.cpp \
     src/backend.cpp \
+    src/mathrenderer.cpp \
+    src/mathscanner.cpp \
     src/markdownhighlighter.cpp \
     src/systemtheme.cpp
 
