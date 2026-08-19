@@ -22,7 +22,8 @@ Install via the Omarchy Package Repository via the `omawrite` package. It's inst
 - `Ctrl+F` searches the document. Use `Enter` or `Ctrl+G` for the next match and `Shift+Enter` for the previous match.
 - `Ctrl+H` opens find and replace.
 - `Ctrl+B`, `Ctrl+I`, and `Ctrl+K` insert bold, italic, and link Markdown.
-- `Ctrl+?` shows the keyboard shortcut reference.
+- `Ctrl+/` shows the keyboard shortcut reference (`Ctrl+?` on layouts
+  where `?` shares the `/` key).
 
 Unsaved drafts are recovered after an abnormal exit. Omawrite also watches open files
 and warns before an external change can replace local work.
@@ -36,9 +37,16 @@ Omawrite at the size it is designed around; larger and smaller sizes scale from 
 - Qt 6: `qt6-base`, `qt6-declarative`, `qt6-quickcontrols2`, `qt6-svg`
 - `xdg-desktop-portal` and a portal backend
 
-Math formulas are rendered inline using a bundled MathJax `tex-svg` runtime. By
-default (`math/SaveFormulaAsSvg=true` in `QSettings`), generated SVG is cached
-under a `.svg-cache/` directory next to the current document when possible.
+Math formulas are rendered inline using a bundled MathJax `tex-svg` runtime.
+Supported delimiters are:
+
+- Inline: `$...$`, `\(...\)`
+- Display: `$$...$$`, `\[...\]`
+
+Escaped dollars (`\$`) are ignored, and formulas inside inline/fenced code are
+not parsed as math. By default (`math/SaveFormulaAsSvg=true` in `QSettings`),
+generated SVG is cached under a `.svg-cache/` directory next to the current
+document when possible.
 
 The iA Writer Mono font is bundled under the SIL Open Font License 1.1; see
 `fonts/OFL.txt`. The font is copyright Information Architects Inc. and based on
