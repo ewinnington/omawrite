@@ -3,6 +3,7 @@
 #include <QClipboard>
 #include <QColor>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -24,6 +25,9 @@
 #include <QTextBlockFormat>
 #include <QTextCursor>
 #include <QTextDocument>
+#include <QTextFormat>
+#include <QTextFragment>
+#include <QTextImageFormat>
 #include <QTextStream>
 #include <QUrl>
 #include <QVariantMap>
@@ -32,9 +36,19 @@
 #include <algorithm>
 
 #include "markdownhighlighter.h"
+#include "mathscanner.h"
 
 constexpr qreal typoraLineHeightPercent = 140;
+constexpr qreal baseEditorPointSize = 15.0;
 const QString lastSaveDirectorySetting = QStringLiteral("file/lastSaveDirectory");
+constexpr int mathSourceProperty = QTextFormat::UserProperty + 101;
+
+struct LoadingGuard {
+    bool &flag;
+    bool previous = false;
+    explicit LoadingGuard(bool &value) : flag(value), previous(value) { flag = true; }
+    ~LoadingGuard() { flag = previous; }
+};
 
 QString Backend::normalizedLinkUrl(const QString &clipboardText) {
     QString candidate = clipboardText.trimmed();
@@ -72,6 +86,7 @@ QString Backend::normalizedLinkUrl(const QString &clipboardText) {
 }
 
 Backend::Backend(QObject *parent) : QObject(parent) {
+    m_mathRenderingEnabled = QSettings().value(QStringLiteral("math/RenderEnabled"), true).toBool();
     const QString stateDirectory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QDir().mkpath(stateDirectory);
     // Claim an orphaned snapshot before taking an empty slot. This ensures a
@@ -163,6 +178,7 @@ void Backend::setTextScale(qreal textScale) {
         return;
 
     m_textScale = textScale;
+    applyMathRenderMode();
     emit textScaleChanged();
 }
 
@@ -181,6 +197,8 @@ void Backend::attachDocument(QObject *textDocument) {
     m_highlighter = new MarkdownHighlighter(m_document);
     m_highlighter->setDarkMode(m_darkMode);
     m_highlighter->setColors(m_themeBackground, m_themeForeground, m_themeAccent);
+    m_mathRenderer.setDocumentDirectory(
+        m_fileUrl.isLocalFile() ? QFileInfo(m_fileUrl.toLocalFile()).absolutePath() : QString());
 
     connect(m_document, &QTextDocument::contentsChange, this,
             [this](int position, int, int charsAdded) {
@@ -434,6 +452,7 @@ void Backend::loadDocumentText(const QString &text) {
     m_loading = false;
 
     applyDocumentTypography();
+    applyMathRenderMode();
     m_wordCountTimer.stop();
     setWordCount(countWords(text));
 }
@@ -443,8 +462,26 @@ void Backend::setFileUrl(const QUrl &url) {
         return;
 
     m_fileUrl = url;
+    m_mathRenderer.setDocumentDirectory(
+        m_fileUrl.isLocalFile() ? QFileInfo(m_fileUrl.toLocalFile()).absolutePath() : QString());
     emit fileUrlChanged();
     watchCurrentFile();
+}
+
+void Backend::setMathRenderingEnabled(bool enabled) {
+    if (m_mathRenderingEnabled == enabled)
+        return;
+
+    m_mathRenderingEnabled = enabled;
+    QSettings().setValue(QStringLiteral("math/RenderEnabled"), enabled);
+    applyMathRenderMode();
+    setStatus(enabled ? QStringLiteral("Math rendering on")
+                      : QStringLiteral("Math rendering off"));
+    emit mathRenderingEnabledChanged();
+}
+
+void Backend::toggleMathRendering() {
+    setMathRenderingEnabled(!m_mathRenderingEnabled);
 }
 
 void Backend::setModified(bool modified) {
@@ -640,6 +677,7 @@ void Backend::loadOmarchyTheme() {
         m_highlighter->setDarkMode(m_darkMode);
         m_highlighter->setColors(m_themeBackground, m_themeForeground, m_themeAccent);
     }
+    applyMathRenderMode();
 
     emit themeColorsChanged();
 }
@@ -662,6 +700,120 @@ void Backend::watchOmarchyTheme() {
         m_themeWatcher.addPath(colorsPath);
 }
 
+void Backend::applyMathRenderMode() {
+    if (!m_document)
+        return;
+
+    const bool undoEnabled = m_document->isUndoRedoEnabled();
+    m_document->setUndoRedoEnabled(false);
+    restoreMathSource();
+    if (m_mathRenderingEnabled)
+        renderMathSpans();
+    m_document->setUndoRedoEnabled(undoEnabled);
+}
+
+void Backend::renderMathSpans() {
+    if (!m_document)
+        return;
+
+    const QString source = currentDocumentText();
+    const QVector<MathSpan> spans = scanMath(source);
+    if (spans.isEmpty())
+        return;
+
+    const qreal pointSize = baseEditorPointSize * m_textScale;
+
+    const qreal dpr = m_parentWindow ? m_parentWindow->devicePixelRatio() : 1.0;
+    const QColor foreground(m_themeForeground.isEmpty() ? QStringLiteral("#222324") : m_themeForeground);
+
+    LoadingGuard loadingGuard(m_loading);
+    QTextCursor cursor(m_document);
+    for (int i = spans.size() - 1; i >= 0; --i) {
+        const MathSpan &span = spans.at(i);
+        if (span.start < 0 || span.end <= span.start || span.end > source.size())
+            continue;
+
+        const QString tex = source.mid(span.start, span.end - span.start);
+        const QImage image = m_mathRenderer.renderImage(tex, span.display, pointSize, dpr, foreground);
+        if (image.isNull())
+            continue;
+
+        const QString imageKey = QStringLiteral("math://%1").arg(
+            QString::fromLatin1(
+                QCryptographicHash::hash(
+                    tex.toUtf8() + QByteArray(1, '\x1f')
+                        + QByteArray(span.display ? "1" : "0")
+                        + QByteArray(1, '\x1f')
+                        + QByteArray::number(pointSize, 'f', 3)
+                        + QByteArray(1, '\x1f')
+                        + QByteArray::number(dpr, 'f', 3)
+                        + QByteArray(1, '\x1f')
+                        + QByteArray::number(foreground.rgba(), 16),
+                    QCryptographicHash::Sha256)
+                    .toHex()));
+        const QUrl imageUrl(imageKey);
+        m_document->addResource(QTextDocument::ImageResource, imageUrl, image);
+
+        QTextImageFormat imageFormat;
+        imageFormat.setObjectType(QTextFormat::ImageObject);
+        imageFormat.setName(imageUrl.toString());
+        imageFormat.setWidth(image.width() / image.devicePixelRatio());
+        imageFormat.setHeight(image.height() / image.devicePixelRatio());
+        imageFormat.setProperty(mathSourceProperty, tex);
+
+        cursor.setPosition(span.start);
+        cursor.setPosition(span.end, QTextCursor::KeepAnchor);
+        cursor.insertText(QString(QChar::ObjectReplacementCharacter), imageFormat);
+    }
+    m_lastDocumentText = currentDocumentText();
+}
+
+void Backend::restoreMathSource() {
+    if (!m_document)
+        return;
+
+    const int endPosition = m_document->characterCount() - 1;
+    if (endPosition <= 0)
+        return;
+
+    struct Replacement {
+        int start = 0;
+        int end = 0;
+        QString tex;
+    };
+    QVector<Replacement> replacements;
+    for (QTextBlock block = m_document->begin(); block.isValid(); block = block.next()) {
+        for (QTextBlock::iterator it = block.begin(); !it.atEnd(); ++it) {
+            const QTextFragment fragment = it.fragment();
+            if (!fragment.isValid())
+                continue;
+            const QString fragmentText = fragment.text();
+            if (!fragmentText.contains(QChar::ObjectReplacementCharacter))
+                continue;
+            const QString tex = fragment.charFormat().property(mathSourceProperty).toString();
+            if (tex.isEmpty())
+                continue;
+            for (int i = 0; i < fragmentText.size(); ++i) {
+                if (fragmentText.at(i) != QChar::ObjectReplacementCharacter)
+                    continue;
+                const int start = fragment.position() + i;
+                replacements.append({start, start + 1, tex});
+            }
+        }
+    }
+    if (replacements.isEmpty())
+        return;
+
+    LoadingGuard loadingGuard(m_loading);
+    QTextCursor cursor(m_document);
+    for (int i = replacements.size() - 1; i >= 0; --i) {
+        const Replacement &replacement = replacements.at(i);
+        cursor.setPosition(replacement.start);
+        cursor.setPosition(replacement.end, QTextCursor::KeepAnchor);
+        cursor.insertText(replacement.tex);
+    }
+}
+
 QUrl Backend::suggestedSaveUrl() const {
     if (m_fileUrl.isLocalFile())
         return m_fileUrl;
@@ -675,7 +827,41 @@ QUrl Backend::suggestedSaveUrl() const {
 }
 
 QString Backend::currentDocumentText() const {
-    return m_document ? m_document->toPlainText() : QString();
+    if (!m_document)
+        return {};
+
+    QString text;
+    text.reserve(m_document->characterCount());
+    for (QTextBlock block = m_document->begin(); block.isValid(); block = block.next()) {
+        for (QTextBlock::iterator it = block.begin(); !it.atEnd(); ++it) {
+            const QTextFragment fragment = it.fragment();
+            if (!fragment.isValid())
+                continue;
+            const QString fragmentText = fragment.text();
+            if (!fragmentText.contains(QChar::ObjectReplacementCharacter)) {
+                text += fragmentText;
+                continue;
+            }
+            const QString tex = fragment.charFormat().property(mathSourceProperty).toString();
+            int runStart = 0;
+            for (int i = 0; i < fragmentText.size(); ++i) {
+                if (fragmentText.at(i) != QChar::ObjectReplacementCharacter)
+                    continue;
+                if (i > runStart)
+                    text += fragmentText.mid(runStart, i - runStart);
+                if (tex.isEmpty())
+                    text += QChar::ObjectReplacementCharacter;
+                else
+                    text += tex;
+                runStart = i + 1;
+            }
+            if (runStart < fragmentText.size())
+                text += fragmentText.mid(runStart);
+        }
+        if (block.next().isValid())
+            text += QLatin1Char('\n');
+    }
+    return text;
 }
 
 int Backend::countWords(const QString &text) {

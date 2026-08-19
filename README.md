@@ -22,6 +22,7 @@ Install via the Omarchy Package Repository via the `omawrite` package. It's inst
 - `Ctrl+F` searches the document. Use `Enter` or `Ctrl+G` for the next match and `Shift+Enter` for the previous match.
 - `Ctrl+H` opens find and replace.
 - `Ctrl+B`, `Ctrl+I`, and `Ctrl+K` insert bold, italic, and link Markdown.
+- `Ctrl+M` toggles math render mode (rendered formulas vs LaTeX source).
 - `Ctrl+/` shows the keyboard shortcut reference (`Ctrl+?` is also accepted
   as a compatibility alias).
 
@@ -47,6 +48,8 @@ Escaped dollars (`\$`) are ignored, and formulas inside inline/fenced code are
 not parsed as math. By default (`math/SaveFormulaAsSvg=true` in `QSettings`),
 generated SVG is cached under a `.svg-cache/` directory next to the current
 document when possible.
+
+Use `Ctrl+M` to switch between rendered formulas and editable LaTeX source.
 
 The iA Writer Mono font is bundled under the SIL Open Font License 1.1; see
 `fonts/OFL.txt`. The font is copyright Information Architects Inc. and based on

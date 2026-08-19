@@ -107,6 +107,25 @@ private slots:
                  QStringLiteral("$$x$$"));
     }
 
+    void togglesMathRenderMode() {
+        QSettings settings;
+        settings.remove(QStringLiteral("math/RenderEnabled"));
+
+        Backend backend;
+        QCOMPARE(backend.mathRenderingEnabled(), true);
+
+        QSignalSpy changedSpy(&backend, &Backend::mathRenderingEnabledChanged);
+        backend.toggleMathRendering();
+        QCOMPARE(backend.mathRenderingEnabled(), false);
+        QCOMPARE(changedSpy.count(), 1);
+        QCOMPARE(QSettings().value(QStringLiteral("math/RenderEnabled")), QVariant(false));
+
+        backend.toggleMathRendering();
+        QCOMPARE(backend.mathRenderingEnabled(), true);
+        QCOMPARE(changedSpy.count(), 2);
+        QCOMPARE(QSettings().value(QStringLiteral("math/RenderEnabled")), QVariant(true));
+    }
+
     void loadsCurrentOmarchyTheme() {
         QTemporaryDir homeDirectory;
         QVERIFY(homeDirectory.isValid());
