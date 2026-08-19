@@ -1,4 +1,4 @@
-# Omawrite
+# Omaths
 
 A dead-simple Markdown writing app built with Qt Quick and C++ that automatically follows system dark/light mode.
 
@@ -8,7 +8,7 @@ A dead-simple Markdown writing app built with Qt Quick and C++ that automaticall
 
 ## Install
 
-Install via the Omarchy Package Repository via the `omawrite` package. It's installed by default in new installations of Omarchy (from Quattro forward).
+Build and install the `omaths` package locally with `./bin/install` (Arch, via `makepkg`), or build the binary only with `./bin/build`.
 
 ## Shortcuts
 
@@ -16,7 +16,7 @@ Install via the Omarchy Package Repository via the `omawrite` package. It's inst
 - `Ctrl+Shift+S` saves as.
 - `Ctrl+O` opens a Markdown file through the portal picker.
 - `Ctrl+P` opens the system print dialog.
-- `Ctrl+N` opens a new Omawrite window.
+- `Ctrl+N` opens a new Omaths window.
 - `Ctrl+Z`, `Ctrl+Shift+Z`, and `Ctrl+Y` handle undo and redo.
 - `Super+F` toggles fullscreen. Qt maps this key as `Meta+F`.
 - `Ctrl+F` searches the document. Use `Enter` or `Ctrl+G` for the next match and `Shift+Enter` for the previous match.
@@ -26,12 +26,12 @@ Install via the Omarchy Package Repository via the `omawrite` package. It's inst
 - `Ctrl+/` shows the keyboard shortcut reference (`Ctrl+?` is also accepted
   as a compatibility alias).
 
-Unsaved drafts are recovered after an abnormal exit. Omawrite also watches open files
+Unsaved drafts are recovered after an abnormal exit. Omaths also watches open files
 and warns before an external change can replace local work.
 
 Text follows the desktop text size — `omarchy display text size`, or GNOME's
 `text-scaling-factor` — and re-flows without a restart. The default of 12px leaves
-Omawrite at the size it is designed around; larger and smaller sizes scale from there.
+Omaths at the size it is designed around; larger and smaller sizes scale from there.
 
 ## Requirements
 
