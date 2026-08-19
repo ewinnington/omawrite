@@ -22,8 +22,8 @@ Install via the Omarchy Package Repository via the `omawrite` package. It's inst
 - `Ctrl+F` searches the document. Use `Enter` or `Ctrl+G` for the next match and `Shift+Enter` for the previous match.
 - `Ctrl+H` opens find and replace.
 - `Ctrl+B`, `Ctrl+I`, and `Ctrl+K` insert bold, italic, and link Markdown.
-- `Ctrl+/` shows the keyboard shortcut reference (`Ctrl+?` on layouts
-  where `?` shares the `/` key).
+- `Ctrl+/` shows the keyboard shortcut reference (`Ctrl+?` is also accepted
+  as a compatibility alias).
 
 Unsaved drafts are recovered after an abnormal exit. Omawrite also watches open files
 and warns before an external change can replace local work.
