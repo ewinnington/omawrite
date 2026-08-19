@@ -112,6 +112,9 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     m_recoveryTimer.setSingleShot(true);
     m_recoveryTimer.setInterval(750);
     connect(&m_recoveryTimer, &QTimer::timeout, this, &Backend::writeRecovery);
+    m_mathRenderTimer.setSingleShot(true);
+    m_mathRenderTimer.setInterval(180);
+    connect(&m_mathRenderTimer, &QTimer::timeout, this, &Backend::applyMathRenderMode);
     connect(&m_fileWatcher, &QFileSystemWatcher::fileChanged, this,
             [this](const QString &path) {
                 if (path != m_fileUrl.toLocalFile())
@@ -376,6 +379,7 @@ bool Backend::editorTextChanged() {
     setModified(true);
     setStatus(QStringLiteral("Unsaved"));
     scheduleRecovery();
+    scheduleMathRender();
     return true;
 }
 
@@ -474,6 +478,8 @@ void Backend::setMathRenderingEnabled(bool enabled) {
 
     m_mathRenderingEnabled = enabled;
     QSettings().setValue(QStringLiteral("math/RenderEnabled"), enabled);
+    if (!enabled)
+        m_mathRenderTimer.stop();
     applyMathRenderMode();
     setStatus(enabled ? QStringLiteral("Math rendering on")
                       : QStringLiteral("Math rendering off"));
@@ -724,48 +730,73 @@ void Backend::renderMathSpans() {
     const qreal pointSize = baseEditorPointSize * m_textScale;
 
     const qreal dpr = m_parentWindow ? m_parentWindow->devicePixelRatio() : 1.0;
-    const QColor foreground(m_themeForeground.isEmpty() ? QStringLiteral("#222324") : m_themeForeground);
+    QColor foreground(m_themeForeground);
+    if (!foreground.isValid())
+        foreground = m_darkMode ? QColor(QStringLiteral("#eeeeee"))
+                                : QColor(QStringLiteral("#222324"));
 
     LoadingGuard loadingGuard(m_loading);
     QTextCursor cursor(m_document);
+    int renderedCount = 0;
+    QString lastRenderError;
     for (int i = spans.size() - 1; i >= 0; --i) {
         const MathSpan &span = spans.at(i);
         if (span.start < 0 || span.end <= span.start || span.end > source.size())
             continue;
 
-        const QString tex = source.mid(span.start, span.end - span.start);
-        const QImage image = m_mathRenderer.renderImage(tex, span.display, pointSize, dpr, foreground);
-        if (image.isNull())
+        const QString delimited = source.mid(span.start, span.end - span.start);
+        const QString tex = mathContent(delimited);
+        if (tex.trimmed().isEmpty())
             continue;
 
-        const QString imageKey = QStringLiteral("math://%1").arg(
-            QString::fromLatin1(
-                QCryptographicHash::hash(
-                    tex.toUtf8() + QByteArray(1, '\x1f')
-                        + QByteArray(span.display ? "1" : "0")
-                        + QByteArray(1, '\x1f')
-                        + QByteArray::number(pointSize, 'f', 3)
-                        + QByteArray(1, '\x1f')
-                        + QByteArray::number(dpr, 'f', 3)
-                        + QByteArray(1, '\x1f')
-                        + QByteArray::number(foreground.rgba(), 16),
-                    QCryptographicHash::Sha256)
-                    .toHex()));
-        const QUrl imageUrl(imageKey);
-        m_document->addResource(QTextDocument::ImageResource, imageUrl, image);
+        const QImage image = m_mathRenderer.renderImage(tex, span.display, pointSize, dpr, foreground);
+        if (image.isNull()) {
+            lastRenderError = m_mathRenderer.lastError();
+            continue;
+        }
+        ++renderedCount;
+
+        // Use a path-form URL. `math://<64 hex>` is an invalid QUrl (host
+        // labels max out at 63 chars), so addResource stored nothing and
+        // Qt Quick painted the missing-image file icon instead.
+        const QString digest = QString::fromLatin1(
+            QCryptographicHash::hash(
+                tex.toUtf8() + QByteArray(1, '\x1f')
+                    + QByteArray(span.display ? "1" : "0")
+                    + QByteArray(1, '\x1f')
+                    + QByteArray::number(pointSize, 'f', 3)
+                    + QByteArray(1, '\x1f')
+                    + QByteArray::number(dpr, 'f', 3)
+                    + QByteArray(1, '\x1f')
+                    + QByteArray::number(foreground.rgba(), 16),
+                QCryptographicHash::Sha256)
+                .toHex());
+        const QUrl imageUrl(QStringLiteral("math:///%1").arg(digest));
+        if (!imageUrl.isValid())
+            continue;
+        m_document->addResource(QTextDocument::ImageResource, imageUrl,
+                                QVariant::fromValue(image));
 
         QTextImageFormat imageFormat;
         imageFormat.setObjectType(QTextFormat::ImageObject);
         imageFormat.setName(imageUrl.toString());
         imageFormat.setWidth(image.width() / image.devicePixelRatio());
         imageFormat.setHeight(image.height() / image.devicePixelRatio());
-        imageFormat.setProperty(mathSourceProperty, tex);
+        imageFormat.setProperty(mathSourceProperty, delimited);
 
         cursor.setPosition(span.start);
         cursor.setPosition(span.end, QTextCursor::KeepAnchor);
         cursor.insertText(QString(QChar::ObjectReplacementCharacter), imageFormat);
     }
+    if (renderedCount == 0 && !lastRenderError.isEmpty())
+        setStatus(lastRenderError);
     m_lastDocumentText = currentDocumentText();
+}
+
+void Backend::scheduleMathRender() {
+    if (!m_mathRenderingEnabled)
+        return;
+    m_mathRenderTimer.start();
 }
 
 void Backend::restoreMathSource() {

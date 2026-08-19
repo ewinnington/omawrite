@@ -3,7 +3,7 @@
 pkgname=omaths
 pkgver=0.1.0
 pkgrel=1
-pkgdesc='Dead-simple Markdown writing app built with Qt Quick'
+pkgdesc='Markdown writing app for entering LaTeX maths, derived from omawrite'
 arch=('x86_64')
 url='https://github.com/ewinnington/omaths'
 license=('MIT')

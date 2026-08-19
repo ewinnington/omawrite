@@ -23,10 +23,9 @@ bool isEscaped(const QString &text, int index) {
     return (backslashes % 2) == 1;
 }
 
-bool isOuterSpaceOrBoundary(const QString &text, int index) {
-    if (index < 0 || index >= text.size())
-        return true;
-    return text.at(index).isSpace();
+bool isFollowedByDigit(const QString &text, int index) {
+    const int next = index + 1;
+    return next < text.size() && text.at(next).isDigit();
 }
 
 void maskRange(QString &masked, int start, int end) {
@@ -146,9 +145,9 @@ void collectSingleDollar(const QString &text, QVector<CandidateSpan> &candidates
         if ((i + 1 < text.size() && text.at(i + 1) == QLatin1Char('$'))
                 || (i - 1 >= 0 && text.at(i - 1) == QLatin1Char('$')))
             continue;
-        if (!isOuterSpaceOrBoundary(text, i - 1))
-            continue;
-        if (i + 1 >= text.size() || text.at(i + 1).isSpace() || text.at(i + 1) == QLatin1Char('\n'))
+        // Pandoc-style: opening $ cannot be followed by space, and does not
+        // need whitespace before it, so `$n$,` and `($x$)` still parse.
+        if (i + 1 >= text.size() || text.at(i + 1).isSpace())
             continue;
 
         const int lineEnd = text.indexOf(QLatin1Char('\n'), i + 1);
@@ -168,7 +167,8 @@ void collectSingleDollar(const QString &text, QVector<CandidateSpan> &candidates
                     continue;
                 }
 
-                if (!isOuterSpaceOrBoundary(text, j + 1)) {
+                // A closer followed by a digit is currency (`$5 and $6`), not math.
+                if (isFollowedByDigit(text, j)) {
                     ++j;
                     continue;
                 }
@@ -294,5 +294,21 @@ QVector<MathSpan> scanMath(const QString &text) {
     });
 
     return accepted;
+}
+
+QString mathContent(const QString &delimited) {
+    if (delimited.startsWith(QLatin1String("$$")) && delimited.endsWith(QLatin1String("$$"))
+            && delimited.size() >= 4)
+        return delimited.mid(2, delimited.size() - 4);
+    if (delimited.startsWith(QLatin1String("\\[")) && delimited.endsWith(QLatin1String("\\]"))
+            && delimited.size() >= 4)
+        return delimited.mid(2, delimited.size() - 4);
+    if (delimited.startsWith(QLatin1String("\\(")) && delimited.endsWith(QLatin1String("\\)"))
+            && delimited.size() >= 4)
+        return delimited.mid(2, delimited.size() - 4);
+    if (delimited.startsWith(QLatin1Char('$')) && delimited.endsWith(QLatin1Char('$'))
+            && delimited.size() >= 2)
+        return delimited.mid(1, delimited.size() - 2);
+    return delimited;
 }
 

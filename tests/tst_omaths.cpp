@@ -4,8 +4,10 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickStyle>
+#include <QUrl>
 
 #include "backend.h"
+#include "mathrenderer.h"
 #include "mathscanner.h"
 #include "markdownhighlighter.h"
 
@@ -75,8 +77,11 @@ private slots:
         QCOMPARE(scanMath(QStringLiteral("$x$")).size(), 1);
         QCOMPARE(scanMath(QStringLiteral("$ x$")).size(), 0);
         QCOMPARE(scanMath(QStringLiteral("$x $")).size(), 0);
-        QCOMPARE(scanMath(QStringLiteral("a$x$ b")).size(), 0);
+        QCOMPARE(scanMath(QStringLiteral("a$x$ b")).size(), 1);
         QCOMPARE(scanMath(QStringLiteral("$5 and $6")).size(), 0);
+        QCOMPARE(scanMath(QStringLiteral("each $n\\in\\mathbb{N}$, next")).size(), 1);
+        QCOMPARE(scanMath(QStringLiteral("($x$)")).size(), 1);
+        QCOMPARE(scanMath(QStringLiteral("$x$.")).size(), 1);
     }
 
     void ignoresEscapedDollarsAndCode() {
@@ -96,6 +101,30 @@ private slots:
         QCOMPARE(spans.size(), 2);
         QVERIFY(!spans.at(0).display);
         QVERIFY(spans.at(1).display);
+    }
+
+    void extractsMathContentFromDelimiters() {
+        QCOMPARE(mathContent(QStringLiteral("$x+1$")), QStringLiteral("x+1"));
+        QCOMPARE(mathContent(QStringLiteral("$$x^2$$")), QStringLiteral("x^2"));
+        QCOMPARE(mathContent(QStringLiteral("\\(a+b\\)")), QStringLiteral("a+b"));
+        QCOMPARE(mathContent(QStringLiteral("\\[y^2\\]")), QStringLiteral("y^2"));
+    }
+
+    void rendersTexToSvg() {
+        MathRenderer renderer;
+        const QString svg = renderer.renderSvg(QStringLiteral("x+1"), false);
+        QVERIFY2(!svg.isEmpty(), qPrintable(renderer.lastError()));
+        QVERIFY(svg.contains(QStringLiteral("<svg")));
+    }
+
+    void mathImageResourceUrlRoundtrips() {
+        const QString digest = QString(64, QLatin1Char('a'));
+        QVERIFY(!QUrl(QStringLiteral("math://%1").arg(digest)).isValid());
+
+        const QUrl url(QStringLiteral("math:///%1").arg(digest));
+        QVERIFY(url.isValid());
+        QCOMPARE(url.path(), QStringLiteral("/") + digest);
+        QCOMPARE(QUrl(url.toString()), url);
     }
 
     void keepsDisplayPriorityOverInlineDollar() {

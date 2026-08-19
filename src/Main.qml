@@ -13,7 +13,7 @@ ApplicationWindow {
     minimumWidth: 720
     minimumHeight: 520
     visible: true
-    title: (backend.modified ? "* " : "") + backend.fileName + " - Omaths"
+    title: (backend.modified ? "* " : "") + backend.fileName + " - omaths"
 
     readonly property bool darkMode: backend.darkMode
     readonly property color pageColor: backend.themeBackground
@@ -845,7 +845,8 @@ ApplicationWindow {
             anchors.bottom: parent.bottom
             anchors.rightMargin: 12
             anchors.bottomMargin: 10
-            text: backend.wordCount + (backend.wordCount === 1 ? " Word" : " Words")
+            text: (backend.mathRenderingEnabled ? "Math on · " : "Math off · ")
+                  + backend.wordCount + (backend.wordCount === 1 ? " Word" : " Words")
             color: win.mutedColor
             opacity: 0.75
             font.family: "iA Writer Mono S"

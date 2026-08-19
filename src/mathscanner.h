@@ -11,4 +11,5 @@ struct MathSpan {
 
 QString maskCode(const QString &text);
 QVector<MathSpan> scanMath(const QString &text);
+QString mathContent(const QString &delimited);
 

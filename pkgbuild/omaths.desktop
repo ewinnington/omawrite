@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=Omaths
+Name=omaths
 GenericName=Markdown Writer
-Comment=Dead-simple Markdown writing app
+Comment=Markdown writing app for entering LaTeX maths, derived from omawrite
 Exec=omaths %f
 Icon=omaths
 Terminal=false
