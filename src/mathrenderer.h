@@ -35,9 +35,9 @@ private:
     qreal m_lastBaselineOffset = 0.0;
 
     QHash<QString, QString> m_svgCache;
+    QHash<QString, qreal> m_imageBaselineCache;
     QCache<QString, QImage> m_imageCache;
 
     bool m_saveFormulaAsSvg = true;
     QString m_documentDirectory;
 };
-

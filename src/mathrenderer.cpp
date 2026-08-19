@@ -23,9 +23,7 @@ QString digestKey(const QString &raw) {
         QCryptographicHash::hash(raw.toUtf8(), QCryptographicHash::Sha256).toHex());
 }
 
-qreal parseExMetric(const QString &svg, const QString &name, qreal fallback = 0.0) {
-    const QRegularExpression re(
-        QStringLiteral("%1=\\\"([0-9.+-]+)ex\\\"").arg(QRegularExpression::escape(name)));
+qreal parseWithRegex(const QString &svg, const QRegularExpression &re, qreal fallback = 0.0) {
     const QRegularExpressionMatch match = re.match(svg);
     if (!match.hasMatch())
         return fallback;
@@ -34,14 +32,19 @@ qreal parseExMetric(const QString &svg, const QString &name, qreal fallback = 0.
     return ok ? value : fallback;
 }
 
+qreal parseWidthEx(const QString &svg) {
+    static const QRegularExpression widthRe(QStringLiteral("width=\\\"([0-9.+-]+)ex\\\""));
+    return parseWithRegex(svg, widthRe);
+}
+
+qreal parseHeightEx(const QString &svg) {
+    static const QRegularExpression heightRe(QStringLiteral("height=\\\"([0-9.+-]+)ex\\\""));
+    return parseWithRegex(svg, heightRe);
+}
+
 qreal parseVerticalAlignEx(const QString &svg) {
     static const QRegularExpression re(QStringLiteral("vertical-align:\\s*([0-9.+-]+)ex"));
-    const QRegularExpressionMatch match = re.match(svg);
-    if (!match.hasMatch())
-        return 0.0;
-    bool ok = false;
-    const qreal value = match.captured(1).toDouble(&ok);
-    return ok ? value : 0.0;
+    return parseWithRegex(svg, re);
 }
 
 } // namespace
@@ -166,13 +169,15 @@ QString MathRenderer::applySvgSizingAndColor(const QString &svg, qreal pointSize
     const qreal pxPerEm = pointSize * (96.0 / 72.0);
     const qreal pxPerEx = pxPerEm * 0.5;
 
-    const qreal widthEx = parseExMetric(rewritten, QStringLiteral("width"));
-    const qreal heightEx = parseExMetric(rewritten, QStringLiteral("height"));
+    const qreal widthEx = parseWidthEx(rewritten);
+    const qreal heightEx = parseHeightEx(rewritten);
     if (widthEx > 0.0 && heightEx > 0.0) {
+        static const QRegularExpression widthExRe(QStringLiteral("width=\\\"[0-9.+-]+ex\\\""));
+        static const QRegularExpression heightExRe(QStringLiteral("height=\\\"[0-9.+-]+ex\\\""));
         const QString widthAttr = QStringLiteral("width=\"%1px\"").arg(widthEx * pxPerEx, 0, 'f', 3);
         const QString heightAttr = QStringLiteral("height=\"%1px\"").arg(heightEx * pxPerEx, 0, 'f', 3);
-        rewritten.replace(QRegularExpression(QStringLiteral("width=\\\"[0-9.+-]+ex\\\"")), widthAttr);
-        rewritten.replace(QRegularExpression(QStringLiteral("height=\\\"[0-9.+-]+ex\\\"")), heightAttr);
+        rewritten.replace(widthExRe, widthAttr);
+        rewritten.replace(heightExRe, heightAttr);
     }
 
     rewritten.replace(QStringLiteral("currentColor"), foreground.name(QColor::HexRgb));
@@ -216,7 +221,7 @@ QImage MathRenderer::renderImage(const QString &tex, bool display, qreal pointSi
 
     const QString key = imageCacheKey(tex, display, pointSize, devicePixelRatio, foreground);
     if (QImage *cached = m_imageCache.object(key)) {
-        m_lastBaselineOffset = 0.0;
+        m_lastBaselineOffset = m_imageBaselineCache.value(key, 0.0);
         return *cached;
     }
 
@@ -256,6 +261,7 @@ QImage MathRenderer::renderImage(const QString &tex, bool display, qreal pointSi
     renderer.render(&painter, QRectF(QPointF(0, 0), QSizeF(svgSize)));
 
     m_lastBaselineOffset = baselineOffsetPx;
+    m_imageBaselineCache.insert(key, baselineOffsetPx);
 
     auto *stored = new QImage(image);
     const int cost = static_cast<int>(std::min<qint64>(stored->sizeInBytes(), std::numeric_limits<int>::max()));
