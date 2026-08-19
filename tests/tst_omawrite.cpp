@@ -6,6 +6,7 @@
 #include <QQuickStyle>
 
 #include "backend.h"
+#include "mathscanner.h"
 #include "markdownhighlighter.h"
 
 class OmawriteTest : public QObject {
@@ -52,6 +53,58 @@ private slots:
         QCOMPARE(markup.at(0).content.length, 4);
         QCOMPARE(markup.at(2).content.length, 4);
         QCOMPARE(markup.at(2).markers[0].length, 1);
+    }
+
+    void scansMathInlineAndDisplayDelimiters() {
+        const QString text = QStringLiteral(
+            "alpha $x+1$ beta\n"
+            "gamma \\(a+b\\) delta\n"
+            "$$x^2$$\n"
+            "\\[y^2\\]\n");
+        const QVector<MathSpan> spans = scanMath(text);
+        QCOMPARE(spans.size(), 4);
+        QCOMPARE(text.mid(spans.at(0).start, spans.at(0).end - spans.at(0).start),
+                 QStringLiteral("$x+1$"));
+        QCOMPARE(text.mid(spans.at(1).start, spans.at(1).end - spans.at(1).start),
+                 QStringLiteral("\\(a+b\\)"));
+        QVERIFY(spans.at(2).display);
+        QVERIFY(spans.at(3).display);
+    }
+
+    void enforcesDollarSpacingRules() {
+        QCOMPARE(scanMath(QStringLiteral("$x$")).size(), 1);
+        QCOMPARE(scanMath(QStringLiteral("$ x$")).size(), 0);
+        QCOMPARE(scanMath(QStringLiteral("$x $")).size(), 0);
+        QCOMPARE(scanMath(QStringLiteral("a$x$ b")).size(), 0);
+        QCOMPARE(scanMath(QStringLiteral("$5 and $6")).size(), 0);
+    }
+
+    void ignoresEscapedDollarsAndCode() {
+        QCOMPARE(scanMath(QStringLiteral("\\$x$")).size(), 0);
+        QCOMPARE(scanMath(QStringLiteral("`$x$`")).size(), 0);
+        QCOMPARE(scanMath(QStringLiteral("```\\n$x$\\n```")).size(), 0);
+        QCOMPARE(scanMath(QStringLiteral("~~~tex\\n$x$\\n~~~")).size(), 0);
+    }
+
+    void supportsMultilineParenAndBracketMath() {
+        const QString text = QStringLiteral(
+            "x \\(a+\n"
+            "b\\) y\n"
+            "\\[c+\n"
+            "d\\]\n");
+        const QVector<MathSpan> spans = scanMath(text);
+        QCOMPARE(spans.size(), 2);
+        QVERIFY(!spans.at(0).display);
+        QVERIFY(spans.at(1).display);
+    }
+
+    void keepsDisplayPriorityOverInlineDollar() {
+        const QString text = QStringLiteral("$$x$$");
+        const QVector<MathSpan> spans = scanMath(text);
+        QCOMPARE(spans.size(), 1);
+        QVERIFY(spans.at(0).display);
+        QCOMPARE(text.mid(spans.at(0).start, spans.at(0).end - spans.at(0).start),
+                 QStringLiteral("$$x$$"));
     }
 
     void loadsCurrentOmarchyTheme() {

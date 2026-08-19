@@ -7,9 +7,11 @@ INCLUDEPATH += ../src
 SOURCES += \
     tst_omawrite.cpp \
     ../src/backend.cpp \
+    ../src/mathscanner.cpp \
     ../src/markdownhighlighter.cpp
 HEADERS += \
     ../src/backend.h \
+    ../src/mathscanner.h \
     ../src/markdownhighlighter.h
 
 QT += widgets printsupport quickcontrols2 quickdialogs2 dbus
